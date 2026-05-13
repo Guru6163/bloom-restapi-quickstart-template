@@ -53,11 +53,9 @@ async function generateVariants(): Promise<void> {
 
     console.log("⏳ Generating 4 variants...");
 
-    const ids = await client.generateImages(
-      brandSessionId,
-      VARIANT_PROMPT,
-      4,
-    );
+    const ids = await client.generateImages(brandSessionId, VARIANT_PROMPT, {
+      variantCount: 4,
+    });
 
     const images: Image[] = await client.waitForImages(ids);
 

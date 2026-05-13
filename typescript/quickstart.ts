@@ -1,30 +1,33 @@
 /**
- * Bloom API quickstart: validates the API key, resolves a brand (listing or onboarding),
- * generates two 16:9 images, waits until they finish, and prints their URLs.
+ * quickstart.ts
  *
- * Run from the `typescript` directory:
+ * Bloom API quickstart — full generation flow in TypeScript.
+ *
+ * Demonstrates: API key validation → brand onboarding → image
+ * generation → polling for results.
+ *
+ * The BloomClient class and all interfaces are exported so the
+ * examples in examples/ can import them directly.
+ *
+ * Usage:
  *   npx ts-node quickstart.ts
  *
  * Environment variables:
- * - BLOOM_API_KEY — required Bloom API key
- * - BLOOM_BRAND_URL — optional site URL used when the account has no brands yet
+ *   BLOOM_API_KEY    (required) — your Bloom API key
+ *   BLOOM_BRAND_URL  (optional) — URL to onboard if no brands exist
  */
 
 import "dotenv/config";
 
-/**
- * Credit balance returned by the Bloom API for the authenticated key.
- */
-interface CreditBalance {
+/** Credit balance for the account. */
+export interface CreditBalance {
   /** Remaining generative credits when not unlimited. */
   balance: number;
   /** When true, credit balance checks do not gate usage. */
   unlimited: boolean;
 }
 
-/**
- * A brand workspace linked to the Bloom account.
- */
+/** A brand in the account. */
 export interface Brand {
   /** Stable brand identifier. */
   id: string;
@@ -46,25 +49,51 @@ export interface Brand {
   aesthetic?: string;
   /** Narrative summary of positioning and tone. */
   summary?: string;
+  /** Number of images associated with this brand (list endpoint). */
+  imageCount?: number;
+  /** Owning workspace identifier when applicable. */
+  workspaceId?: string;
+  /** Owning workspace display name when applicable. */
+  workspaceName?: string;
   /** ISO timestamp of when the brand record was created. */
   createdAt: string;
 }
 
-/**
- * Immediate acknowledgement after requesting image generations.
- */
-interface GenerationResult {
-  /** Image job identifiers to poll until completion. */
-  ids: string[];
-  /** Groups variants generated from the same request. */
-  variantGroupId: string;
-  /** Initial queue state for the generation batch. */
-  status: "pending";
+/** A workspace the caller can access. */
+export interface Workspace {
+  /**
+   * Workspace identifier, or `null` for the personal workspace.
+   */
+  id: string | null;
+  /** Display name shown in the Bloom UI. */
+  name: string;
 }
 
-/**
- * A single generated image record, including optional URL when requested.
- */
+/** Options for image generation. */
+export interface GenerateOptions {
+  /** Target aspect ratio for generated images. */
+  aspectRatio?:
+    | "1:1"
+    | "2:3"
+    | "3:2"
+    | "3:4"
+    | "4:3"
+    | "4:5"
+    | "5:4"
+    | "9:16"
+    | "16:9"
+    | "21:9";
+  /** Output resolution preset. */
+  imageSize?: "2K" | "4K";
+  /** Model tier controlling quality and latency. */
+  model?: "fast" | "standard" | "pro";
+  /** Number of creative variants to return from one request (1–5). */
+  variantCount?: number;
+  /** Optional reference images to condition the generation. */
+  referenceImageIds?: string[];
+}
+
+/** A generated (or uploaded) image. */
 export interface Image {
   /** Unique image identifier. */
   id: string;
@@ -73,17 +102,20 @@ export interface Image {
   /** Public URL when generation completed and URLs are included. */
   imageUrl?: string;
   /** Aspect ratio label such as `16:9`. */
-  aspectRatio: string;
+  aspectRatio?: string;
   /** Prompt text used for this image. */
   prompt?: string;
+  /** How this asset was produced. */
+  actionType?: "generation" | "edit" | "resize" | "variant";
+  /** Groups variants generated from the same request. */
+  variantGroupId?: string;
+  /** ISO timestamp of when the image record was created. */
+  createdAt?: string;
 }
 
-/**
- * Minimal response shape from brand onboarding.
- */
-interface OnboardBrandResponse {
-  /** Identifier of the newly created brand record. */
-  id: string;
+/** Standard JSON envelope for Bloom API success payloads. */
+interface ApiEnvelope<T> {
+  data: T;
 }
 
 /**
@@ -99,39 +131,48 @@ export class BloomClient {
   }
 
   /**
-   * Performs an authenticated JSON request against the Bloom API base URL.
+   * Internal fetch wrapper. Sets auth headers, parses JSON,
+   * and throws a descriptive error on non-2xx responses.
    *
    * @param path - Absolute path beginning with `/`, appended to the API base URL.
-   * @param options - Optional `fetch` init; method, body, and headers are merged safely.
-   * @returns Parsed JSON response body typed as `T`.
-   * @throws When the HTTP status is not OK, with status and response body text.
+   * @param options - Optional `fetch` init; caller headers override the defaults.
+   * @returns The parsed JSON `data` payload typed as `T`.
    */
   private async request<T>(path: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${path}`;
-    const headers = new Headers(options?.headers);
+    const { headers: optionHeaders, ...restOptions } = options ?? {};
+    const headers = new Headers();
     headers.set("Content-Type", "application/json");
     headers.set("x-api-key", this.apiKey);
 
+    if (optionHeaders !== undefined) {
+      const incoming = new Headers(optionHeaders);
+      incoming.forEach((value, key) => {
+        headers.set(key, value);
+      });
+    }
+
     const response = await fetch(url, {
-      ...options,
+      ...restOptions,
       headers,
     });
 
-    const text = await response.text();
-
     if (!response.ok) {
+      const text = await response.text();
       throw new Error(`Bloom API error [${response.status}]: ${text}`);
     }
 
-    if (text.length === 0) {
-      throw new Error(`Bloom API error [${response.status}]: empty response body`);
+    const payload = (await response.json()) as ApiEnvelope<T>;
+
+    if (payload.data === undefined) {
+      throw new Error(`Bloom API error [${response.status}]: missing 'data' envelope`);
     }
 
-    return JSON.parse(text) as T;
+    return payload.data;
   }
 
   /**
-   * Validates the API key by checking the credit balance.
+   * Validates the API key by fetching the credit balance.
    * Throws if the key is invalid or the request fails.
    */
   async validateKey(): Promise<CreditBalance> {
@@ -140,27 +181,44 @@ export class BloomClient {
 
   /**
    * Lists all brands in the account (up to 50).
+   * Use the returned brand's id as brandSessionId when generating images.
    */
   async listBrands(): Promise<Brand[]> {
-    return this.request<Brand[]>("/brands?limit=50", { method: "GET" });
+    const envelope = await this.request<{ brands: Brand[] }>(
+      "/brands?limit=50",
+      { method: "GET" },
+    );
+    return envelope.brands;
   }
 
   /**
-   * Starts brand onboarding for a given URL.
-   * Returns immediately — brand will be in "analyzing" status.
+   * Lists all workspaces the caller can access.
+   * Personal workspace always comes first with id: null.
+   */
+  async listWorkspaces(): Promise<Workspace[]> {
+    const envelope = await this.request<{ workspaces: Workspace[] }>(
+      "/workspaces",
+      { method: "GET" },
+    );
+    return envelope.workspaces;
+  }
+
+  /**
+   * Starts brand onboarding for a website or Instagram URL.
+   * Returns immediately with the new brand ID — status will be "analyzing".
    * Call waitForBrand() to poll until ready.
    */
   async onboardBrand(url: string): Promise<{ id: string }> {
-    const body = JSON.stringify({ url });
-    return this.request<OnboardBrandResponse>("/brands", {
+    const envelope = await this.request<{ id: string }>("/brands", {
       method: "POST",
-      body,
+      body: JSON.stringify({ url }),
     });
+    return { id: envelope.id };
   }
 
   /**
-   * Polls GET /brands/:id with wait=true until status is "ready".
-   * Throws if status comes back as "logo_required".
+   * Polls GET /brands/:id with wait=true until a terminal status is reached.
+   * Throws if the brand requires a logo to proceed.
    */
   async waitForBrand(id: string): Promise<Brand> {
     const path = `/brands/${encodeURIComponent(id)}?wait=true&timeout=120`;
@@ -168,7 +226,7 @@ export class BloomClient {
 
     if (brand.status === "logo_required") {
       throw new Error(
-        "Brand requires a logo. Upload one at trybloom.ai or use PUT /brands/:id/logo",
+        "Brand requires a logo. Upload one at trybloom.ai or via PUT /brands/:id/logo",
       );
     }
 
@@ -176,63 +234,82 @@ export class BloomClient {
   }
 
   /**
-   * Starts generating images at 16:9 with the given prompt.
-   * Returns immediately with an array of image IDs (length matches `variantCount`).
+   * Starts generating images for a brand.
+   * Returns immediately with an array of image IDs — generation runs asynchronously.
    * Call waitForImages() to poll until complete.
    *
-   * @param variantCount - Number of creative variants per request (1–4).
+   * @param brandSessionId - The brand's ID (from Brand.brandSessionId ?? Brand.id)
+   * @param prompt - Description of the image to generate (max 2000 chars)
+   * @param options - Optional: aspectRatio, imageSize, model, variantCount, referenceImageIds
    */
   async generateImages(
     brandSessionId: string,
     prompt: string,
-    variantCount: number = 2,
+    options: GenerateOptions = {},
   ): Promise<string[]> {
-    const body = JSON.stringify({
-      brandSessionId,
-      prompt,
-      aspectRatio: "16:9",
-      imageSize: "2K",
-      model: "fast",
-      variantCount,
-    });
+    const {
+      aspectRatio = "16:9",
+      imageSize = "2K",
+      model = "fast",
+      variantCount = 1,
+      referenceImageIds = [],
+    } = options;
 
-    const result = await this.request<GenerationResult>("/images/generations", {
+    const envelope = await this.request<{ ids: string[] }>("/images/generations", {
       method: "POST",
-      body,
+      body: JSON.stringify({
+        brandSessionId,
+        prompt,
+        aspectRatio,
+        imageSize,
+        model,
+        variantCount,
+        referenceImageIds,
+      }),
     });
 
-    return result.ids;
+    return envelope.ids;
   }
 
   /**
    * Polls GET /images until all given IDs reach a terminal status.
-   * Throws if any image fails.
+   * Throws if any image fails generation.
+   *
+   * @param ids - Array of image IDs returned from generateImages()
    */
   async waitForImages(ids: string[]): Promise<Image[]> {
     if (ids.length === 0) {
       return [];
     }
 
-    const idList = ids.map(encodeURIComponent).join(",");
+    const idList = ids.join(",");
     const path = `/images?ids=${idList}&wait=true&timeout=120&includeUrls=true`;
-    const images = await this.request<Image[]>(path, { method: "GET" });
+    const envelope = await this.request<{ images: Image[] }>(path, {
+      method: "GET",
+    });
 
-    for (const image of images) {
+    for (const image of envelope.images) {
       if (image.status === "failed") {
         throw new Error(`Image generation failed for ID: ${image.id}`);
       }
     }
 
-    return images;
+    return envelope.images;
   }
 }
 
 /**
- * Entry point. Runs the full Bloom API quickstart flow:
+ * Entry point. Demonstrates the full Bloom API generation flow:
  * 1. Validate API key
- * 2. List brands (onboard one if none exist)
+ * 2. List brands — onboard one if none exist
  * 3. Generate 2 images at 16:9
  * 4. Print the image URLs
+ *
+ * Run with: npx ts-node quickstart.ts
+ *
+ * Environment variables:
+ *   BLOOM_API_KEY     — required
+ *   BLOOM_BRAND_URL   — optional, used to onboard if no brands exist
  */
 async function main(): Promise<void> {
   try {
@@ -240,7 +317,7 @@ async function main(): Promise<void> {
 
     if (!apiKey) {
       console.error("✗ Missing BLOOM_API_KEY environment variable");
-      console.error("  Set it in .env or export BLOOM_API_KEY=bloom_sk_...");
+      console.error("  Add it to .env or run: export BLOOM_API_KEY=bloom_sk_...");
       process.exit(1);
     }
 
@@ -267,7 +344,9 @@ async function main(): Promise<void> {
 
       if (!brandUrl) {
         console.error("✗ No brands found. Set BLOOM_BRAND_URL to onboard one.");
-        console.error("  Example: BLOOM_BRAND_URL=https://acme.com");
+        console.error(
+          "  Example: BLOOM_BRAND_URL=https://acme.com npx ts-node quickstart.ts",
+        );
         process.exit(1);
       }
 
@@ -289,6 +368,10 @@ async function main(): Promise<void> {
     const ids = await client.generateImages(
       brandSessionId,
       "A bold product hero image with clean composition",
+      {
+        aspectRatio: "16:9",
+        variantCount: 2,
+      },
     );
 
     const images = await client.waitForImages(ids);
@@ -296,10 +379,6 @@ async function main(): Promise<void> {
     console.log("✓ Images ready:");
 
     for (const img of images) {
-      if (img.imageUrl === undefined || img.imageUrl.length === 0) {
-        throw new Error(`Image ${img.id} completed without a URL`);
-      }
-
       console.log(`  → ${img.imageUrl}`);
     }
   } catch (err) {
