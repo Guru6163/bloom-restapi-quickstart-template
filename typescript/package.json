@@ -1,0 +1,22 @@
+{
+  "name": "bloom-api-quickstart-typescript",
+  "version": "1.0.0",
+  "description": "TypeScript quickstart for the Bloom Brand OS API",
+  "scripts": {
+    "start": "npx ts-node quickstart.ts",
+    "variants": "npx ts-node examples/generate-variants.ts",
+    "batch": "npx ts-node examples/batch-generate.ts",
+    "credits": "npx ts-node examples/check-credits.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.2",
+    "ts-node": "^10.9.2",
+    "@types/node": "^20.14.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
