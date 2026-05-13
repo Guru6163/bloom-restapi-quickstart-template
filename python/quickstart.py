@@ -21,12 +21,13 @@ Environment variables:
 # trybloom.ai/api/v1/docs). Keys are camelCase in JSON; Python code uses the
 # same keys when reading responses.
 #
-# Brand:
+# Brand (list + detail):
 #   id, name, url, status, brandSessionId (optional),
 #   colors (optional list), fonts (optional list),
 #   aesthetic (optional), summary (optional),
 #   imageCount (optional), workspaceId (optional),
-#   workspaceName (optional), createdAt
+#   workspaceName (optional), createdAt,
+#   logoUrl (optional), logoError (optional)
 #
 # CreditBalance:
 #   balance (int), unlimited (bool)
@@ -35,10 +36,12 @@ Environment variables:
 #   id (str | None — None = personal workspace), name
 #
 # Image:
-#   id, status, imageUrl (optional), aspectRatio (optional),
-#   prompt (optional), actionType (optional),
-#   variantGroupId (optional), width (optional),
-#   height (optional), createdAt (optional)
+#   id, status, source (optional: generated|uploaded|scraped),
+#   imageUrl (optional), aspectRatio (optional),
+#   prompt (optional), description (optional),
+#   actionType (optional), variantGroupId (optional),
+#   brandSessionId (optional), width (optional), height (optional),
+#   workspaceId (optional), workspaceName (optional), createdAt (optional)
 #
 # UploadedImage:
 #   id, imageUrl, width, height, mimeType
@@ -111,20 +114,42 @@ class BloomClient:
 
         return data
 
-    def validate_key(self) -> dict:
+    def validate_key(self, workspace_id=None) -> dict:
         """
         Validates the API key by fetching the credit balance.
         Returns: { balance: int, unlimited: bool }
         Raises RuntimeError if the key is invalid.
-        """
-        return self._request("GET", "/credits")
 
-    def list_brands(self) -> list:
+        Args:
+          workspace_id: Optional team workspace ID (omit for personal balance).
         """
-        Lists all brands (up to 50) across all workspaces.
-        Returns list of brand dicts.
+        params = {}
+        if workspace_id is not None:
+            params["workspaceId"] = workspace_id
+        return self._request("GET", "/credits", params=params or None)
+
+    def list_brands(self, workspace_id=None, cursor=None, limit=None) -> list:
         """
-        envelope = self._request("GET", "/brands?limit=50")
+        Lists brand sessions with cursor-based pagination (GET /brands).
+
+        Args:
+          workspace_id: Optional team workspace scope.
+          cursor: Pagination cursor from a previous ``nextCursor``.
+          limit: Results per page (1–100, default 50 when omitted).
+
+        Returns:
+          List of brand dicts (``data.brands``).
+        """
+        params = {}
+        if workspace_id is not None:
+            params["workspaceId"] = workspace_id
+        if cursor is not None:
+            params["cursor"] = cursor
+        if limit is not None:
+            params["limit"] = limit
+        else:
+            params["limit"] = 50
+        envelope = self._request("GET", "/brands", params=params)
         brands = envelope.get("brands")
         if not isinstance(brands, list):
             raise RuntimeError("Bloom API error: 'brands' is not a list")
@@ -142,13 +167,24 @@ class BloomClient:
             raise RuntimeError("Bloom API error: 'workspaces' is not a list")
         return workspaces
 
-    def onboard_brand(self, url: str) -> str:
+    def onboard_brand(self, url: str, logo_url=None, workspace_id=None) -> str:
         """
-        Starts brand onboarding for a website or Instagram URL.
-        Returns the new brand ID immediately (status will be "analyzing").
-        Call wait_for_brand() to poll until ready.
+        Starts brand onboarding for a website or Instagram profile URL.
+
+        Args:
+          url: Target site or Instagram profile URL.
+          logo_url: Optional explicit logo URL (skips automatic extraction).
+          workspace_id: Optional team workspace to create the brand in.
+
+        Returns:
+          New brand id (``data.id``); status will be ``analyzing``.
         """
-        envelope = self._request("POST", "/brands", json={"url": url})
+        body = {"url": url}
+        if logo_url is not None:
+            body["logoUrl"] = logo_url
+        if workspace_id is not None:
+            body["workspaceId"] = workspace_id
+        envelope = self._request("POST", "/brands", json=body)
         brand_id = envelope.get("id")
         if not isinstance(brand_id, str):
             raise RuntimeError("Bloom API error: missing brand id in onboard response")
@@ -175,28 +211,43 @@ class BloomClient:
 
         return brand
 
+    def get_image(self, image_id: str, wait=False, timeout=None) -> dict:
+        """
+        Fetches a single image by ID (GET /images/{id}).
+
+        Args:
+          image_id: Image UUID.
+          wait: When True, long-poll until a terminal status.
+          timeout: Max seconds to wait (1–295; default 120 on the server).
+        """
+        path = f"/images/{requests.utils.quote(str(image_id), safe='')}"
+        params = {}
+        if wait:
+            params["wait"] = "true"
+        if timeout is not None:
+            params["timeout"] = timeout
+        return self._request("GET", path, params=params or None)
+
     def generate_images(
         self,
         brand_session_id: str,
         prompt: str,
         aspect_ratio: str = "16:9",
         image_size: str = "2K",
-        model: str = "fast",
+        model: str = "pro",
         variant_count: int = 1,
         reference_image_ids=None,
     ) -> list:
         """
-        Starts generating images for a brand.
-        Returns a list of image IDs immediately (generation is async).
-        Call wait_for_images() to poll until complete.
+        Starts generating images for a brand (POST /images/generations).
 
         Args:
-          brand_session_id:   Brand ID from list_brands() or wait_for_brand()
+          brand_session_id:   Brand session ID from list_brands / wait_for_brand
           prompt:             Image description (max 2000 chars)
           aspect_ratio:       One of "1:1","2:3","3:2","3:4","4:3","4:5",
                               "5:4","9:16","16:9","21:9" (default "16:9")
-          image_size:         "2K" (1 credit) or "4K" (2 credits) (default "2K")
-          model:              "fast", "standard", or "pro" (default "fast")
+          image_size:         "2K" or "4K" (default "2K")
+          model:              "fast", "standard", or "pro" (API default "pro")
           variant_count:      Number of variants 1-5 (default 1)
           reference_image_ids: Image IDs for style/content guidance (max 10)
         """
@@ -236,7 +287,7 @@ class BloomClient:
                 "ids": ids_param,
                 "wait": "true",
                 "timeout": 120,
-                "includeUrls": "true",
+                "includeUrls": True,
             },
         )
         images = envelope.get("images")
@@ -257,21 +308,18 @@ class BloomClient:
         brand_session_id: str,
         prompt: str,
         image_size: str = "2K",
-        model: str = "fast",
+        model: str = "pro",
         reference_image_ids=None,
     ) -> str:
         """
-        Edits a previously generated or uploaded image.
-        Aspect ratio is locked to the original image's ratio.
-        Returns a new image ID immediately (edit is async).
-        Call wait_for_images([new_id]) to poll until complete.
+        Edits a previously generated or uploaded image (POST /images/{id}/edit).
 
         Args:
           image_id:           ID of the completed image to edit
           brand_session_id:   Brand session ID
           prompt:             Description of what to change
           image_size:         "2K" or "4K" (default "2K")
-          model:              "fast", "standard", or "pro" (default "fast")
+          model:              "fast", "standard", or "pro" (API default "pro")
           reference_image_ids: Optional reference image IDs (max 9)
         """
         path = f"/images/{requests.utils.quote(str(image_id), safe='')}/edit"
@@ -296,9 +344,7 @@ class BloomClient:
         target_aspect_ratio: str,
     ) -> str:
         """
-        Resizes a completed image to a different aspect ratio.
-        Returns a new image ID immediately (resize is async).
-        Call wait_for_images([new_id]) to poll until complete.
+        Resizes a completed image (POST /images/{id}/resize).
 
         Args:
           image_id:             ID of the completed image to resize
@@ -319,13 +365,11 @@ class BloomClient:
 
     def upload_image_url(self, image_url: str, brand_session_id=None) -> dict:
         """
-        Uploads an image by URL for use as a reference or edit subject.
-        The server downloads, validates, and stores it.
-        Returns the uploaded image dict with id, imageUrl, width, height, mimeType.
+        Uploads an image by URL (POST /images/uploads).
 
         Args:
           image_url:        Public URL of the image (PNG, JPG, WebP)
-          brand_session_id: Optional brand session to scope the upload to
+          brand_session_id: Optional brand session to associate the upload with
         """
         body = {"imageUrl": image_url}
         if brand_session_id is not None:
@@ -338,17 +382,17 @@ class BloomClient:
         query: str,
         limit: int = 10,
         max_distance: float = 0.7,
+        cursor=None,
     ) -> list:
         """
-        Semantic search over the brand's library images (uploaded + scraped).
-        Generated images are excluded from search results.
-        Returns candidates ranked nearest-first by visual similarity.
+        Semantic search over library images (POST /images/search).
 
         Args:
           brand_session_id: Brand session UUID to search within
           query:            Plain noun phrase, e.g. "product on white background"
           limit:            Max results (1-50, default 10)
-          max_distance:     Cosine-distance cutoff 0-2 (default 0.7, lower = stricter)
+          max_distance:     Cosine-distance cutoff 0-2 (default 0.7)
+          cursor:           Pagination cursor from a previous ``nextCursor``
         """
         body = {
             "brandSessionId": brand_session_id,
@@ -356,6 +400,8 @@ class BloomClient:
             "limit": limit,
             "maxDistance": max_distance,
         }
+        if cursor is not None:
+            body["cursor"] = cursor
         envelope = self._request("POST", "/images/search", json=body)
         candidates = envelope.get("candidates")
         if not isinstance(candidates, list):
@@ -395,7 +441,8 @@ def main() -> None:
         if brands:
             print(f"✓ Found {len(brands)} brand(s)")
             brand = brands[0]
-            print(f"✓ Using brand: {brand['name']}")
+            display_name = brand.get("name") or brand.get("id")
+            print(f"✓ Using brand: {display_name}")
         else:
             brand_url = os.environ.get("BLOOM_BRAND_URL")
 
@@ -412,7 +459,8 @@ def main() -> None:
 
             brand = client.wait_for_brand(brand_id)
 
-            print(f"✓ Brand ready: {brand['name']}")
+            ready_name = brand.get("name") or brand.get("id")
+            print(f"✓ Brand ready: {ready_name}")
 
         brand_session_id = brand.get("brandSessionId") or brand["id"]
 
@@ -423,6 +471,7 @@ def main() -> None:
             "A bold product hero image with clean composition",
             aspect_ratio="16:9",
             variant_count=2,
+            model="fast",
         )
 
         images = client.wait_for_images(ids)
