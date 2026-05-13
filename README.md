@@ -99,7 +99,9 @@ Output is identical to the TypeScript version above.
 
 ## Examples
 
-All examples are in `typescript/examples/`. Run from the `typescript/` directory.
+TypeScript examples live in `typescript/examples/` (run from `typescript/`). Python mirrors the same three flows in `python/examples/` (run from `python/`).
+
+**Python:** `python examples/generate_variants.py` · `python examples/batch_generate.py` · `python examples/check_credits.py`
 
 ### generate-variants.ts — Multiple creative options
 
@@ -238,7 +240,11 @@ bloom-api-quickstart/
 │   ├── .env.example
 │   └── README.md
 ├── python/
-│   ├── quickstart.py              ← same flow in Python
+│   ├── quickstart.py              ← same flow in Python (BloomClient)
+│   ├── examples/
+│   │   ├── generate_variants.py   ← 4 variants in one call
+│   │   ├── batch_generate.py      ← all platforms in parallel
+│   │   └── check_credits.py       ← pre-flight account check
 │   └── README.md
 ├── .gitignore
 └── README.md                      ← you are here

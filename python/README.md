@@ -65,11 +65,37 @@ python quickstart.py
 
 ---
 
-## More patterns in this repo
+## Examples
 
-Variant batches, parallel multi-platform generation, and credit pre-flight checks are
-implemented as runnable TypeScript scripts under `../typescript/examples/` (same REST
-API — port the HTTP calls to `requests` if you need them in Python).
+Run from the `python/` directory (same `BLOOM_API_KEY` as the quickstart).
+
+### `examples/generate_variants.py` — four variants, one call
+
+```bash
+python examples/generate_variants.py
+```
+
+Uses `BloomClient.generate_images` with `variant_count=4`, then `wait_for_images`.
+
+### `examples/batch_generate.py` — four platforms in parallel
+
+```bash
+python examples/batch_generate.py
+```
+
+Uses a thread pool to start four `POST /images/generations` calls (one aspect ratio each),
+then a single `wait_for_images` over all returned IDs.
+
+### `examples/check_credits.py` — pre-flight account check
+
+```bash
+python examples/check_credits.py
+```
+
+Uses `BloomClient` for credits, workspaces, and brands, then prints the same style of
+cost estimate table as the TypeScript `check-credits` example.
+
+Equivalent scripts also live under `../typescript/examples/` if you want the Node versions.
 
 ---
 
@@ -86,7 +112,11 @@ API — port the HTTP calls to `requests` if you need them in Python).
 
 ```text
 python/
-├── quickstart.py    ← BloomClient-style flow with requests.Session
+├── quickstart.py
+├── examples/
+│   ├── generate_variants.py   ← 4 variants in one generation call
+│   ├── batch_generate.py      ← parallel generations + single poll
+│   └── check_credits.py       ← credits, workspaces, brands, cost table
 └── README.md
 ```
 
