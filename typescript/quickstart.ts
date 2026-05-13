@@ -25,7 +25,7 @@ interface CreditBalance {
 /**
  * A brand workspace linked to the Bloom account.
  */
-interface Brand {
+export interface Brand {
   /** Stable brand identifier. */
   id: string;
   /** Human-readable brand name. */
@@ -65,7 +65,7 @@ interface GenerationResult {
 /**
  * A single generated image record, including optional URL when requested.
  */
-interface Image {
+export interface Image {
   /** Unique image identifier. */
   id: string;
   /** Generation pipeline status for this image. */
@@ -89,7 +89,7 @@ interface OnboardBrandResponse {
 /**
  * Typed HTTP client for the Bloom Brand OS REST API (Node 18+ `fetch`).
  */
-class BloomClient {
+export class BloomClient {
   private readonly apiKey: string;
 
   private readonly baseUrl = "https://www.trybloom.ai/api/v1";
@@ -176,18 +176,24 @@ class BloomClient {
   }
 
   /**
-   * Starts generating 2 images at 16:9 with the given prompt.
-   * Returns immediately with an array of image IDs.
+   * Starts generating images at 16:9 with the given prompt.
+   * Returns immediately with an array of image IDs (length matches `variantCount`).
    * Call waitForImages() to poll until complete.
+   *
+   * @param variantCount - Number of creative variants per request (1–4).
    */
-  async generateImages(brandSessionId: string, prompt: string): Promise<string[]> {
+  async generateImages(
+    brandSessionId: string,
+    prompt: string,
+    variantCount: number = 2,
+  ): Promise<string[]> {
     const body = JSON.stringify({
       brandSessionId,
       prompt,
       aspectRatio: "16:9",
       imageSize: "2K",
       model: "fast",
-      variantCount: 2,
+      variantCount,
     });
 
     const result = await this.request<GenerationResult>("/images/generations", {
