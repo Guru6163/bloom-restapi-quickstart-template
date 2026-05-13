@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.8+ (on macOS the command is usually `python3`, not `python`)
 - A Bloom API key — [trybloom.ai/developers](https://trybloom.ai/developers)
 
 ---
@@ -14,8 +14,10 @@
 ### 1. Install dependencies
 
 ```bash
-pip install requests
+python3 -m pip install requests
 ```
+
+If `pip3` is on your PATH, `pip3 install requests` is equivalent. On some systems `python` / `pip` work; if you see `command not found`, use `python3` / `python3 -m pip` as above.
 
 ### 2. Configure environment
 
@@ -40,7 +42,7 @@ BLOOM_BRAND_URL=https://yourbrand.com
 ## Run the quickstart
 
 ```bash
-python quickstart.py
+python3 quickstart.py
 ```
 
 ### What it does
@@ -67,12 +69,12 @@ python quickstart.py
 
 ## Examples
 
-Run from the `python/` directory (same `BLOOM_API_KEY` as the quickstart).
+Run from the `python/` directory (same `BLOOM_API_KEY` as the quickstart). Use `python3` on macOS if `python` is not found.
 
 ### `examples/generate_variants.py` — four variants, one call
 
 ```bash
-python examples/generate_variants.py
+python3 examples/generate_variants.py
 ```
 
 Uses `BloomClient.generate_images` with `variant_count=4`, then `wait_for_images`.
@@ -80,7 +82,7 @@ Uses `BloomClient.generate_images` with `variant_count=4`, then `wait_for_images
 ### `examples/batch_generate.py` — four platforms in parallel
 
 ```bash
-python examples/batch_generate.py
+python3 examples/batch_generate.py
 ```
 
 Uses a thread pool to start four `POST /images/generations` calls (one aspect ratio each),
@@ -89,7 +91,7 @@ then a single `wait_for_images` over all returned IDs.
 ### `examples/check_credits.py` — pre-flight account check
 
 ```bash
-python examples/check_credits.py
+python3 examples/check_credits.py
 ```
 
 Uses `BloomClient` for credits, workspaces, and brands, then prints the same style of

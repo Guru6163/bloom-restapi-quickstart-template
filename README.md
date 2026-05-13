@@ -75,8 +75,10 @@ npx ts-node quickstart.ts
 
 ```bash
 cd python
-pip install requests
+python3 -m pip install requests
 ```
+
+On macOS, use `python3` / `python3 -m pip` if `python` / `pip` are not found.
 
 ### 2. Configure
 
@@ -90,7 +92,7 @@ export BLOOM_BRAND_URL=https://yourbrand.com
 ### 3. Run
 
 ```bash
-python quickstart.py
+python3 quickstart.py
 ```
 
 Output is identical to the TypeScript version above.
@@ -101,7 +103,7 @@ Output is identical to the TypeScript version above.
 
 TypeScript examples live in `typescript/examples/` (run from `typescript/`). Python mirrors the same three flows in `python/examples/` (run from `python/`).
 
-**Python:** `python examples/generate_variants.py` · `python examples/batch_generate.py` · `python examples/check_credits.py`
+**Python:** `python3 examples/generate_variants.py` · `python3 examples/batch_generate.py` · `python3 examples/check_credits.py`
 
 ### generate-variants.ts — Multiple creative options
 

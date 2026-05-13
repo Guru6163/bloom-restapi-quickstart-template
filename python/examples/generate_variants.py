@@ -8,7 +8,7 @@ API call — useful for A/B testing ad creatives or presenting options to a clie
 
 Run from the ``python`` directory::
 
-    python examples/generate_variants.py
+    python3 examples/generate_variants.py
 
 Environment variables:
 

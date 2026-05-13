@@ -10,7 +10,7 @@ The BloomClient class is importable so the examples in examples/
 can use it directly without redefining API logic.
 
 Usage:
-  python quickstart.py
+  python3 quickstart.py
 
 Environment variables:
   BLOOM_API_KEY    (required) — your Bloom API key
@@ -287,7 +287,7 @@ class BloomClient:
                 "ids": ids_param,
                 "wait": "true",
                 "timeout": 120,
-                "includeUrls": True,
+                "includeUrls": "true",
             },
         )
         images = envelope.get("images")

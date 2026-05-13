@@ -16,7 +16,7 @@ Platforms covered:
 
 Run from the ``python`` directory::
 
-    python examples/batch_generate.py
+    python3 examples/batch_generate.py
 
 Environment variables:
 

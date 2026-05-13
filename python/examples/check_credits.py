@@ -6,7 +6,7 @@ spending credits on generation. Uses ``BloomClient`` for all calls.
 
 Run from the ``python`` directory::
 
-    python examples/check_credits.py
+    python3 examples/check_credits.py
 
 Environment variables:
 
