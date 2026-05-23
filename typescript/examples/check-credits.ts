@@ -2,8 +2,7 @@
  * check-credits.ts
  *
  * Pre-flight example: read credits, workspaces, and brand summaries before
- * spending credits on generation. Uses the shared `BloomClient` for `/credits`
- * and direct `fetch` calls for list endpoints that return a `data` envelope.
+ * spending credits on generation. Uses the shared `BloomClient` for all calls.
  *
  * Run from the `typescript` directory:
  *   npx ts-node examples/check-credits.ts
@@ -14,57 +13,13 @@
 
 import "dotenv/config";
 
-import { BloomClient } from "../quickstart";
-
-const API_BASE = "https://www.trybloom.ai/api/v1";
-
-/** A workspace the caller can access. */
-interface Workspace {
-  /**
-   * Workspace identifier, or `null` for the personal workspace.
-   */
-  id: string | null;
-  /** Display name shown in the Bloom UI. */
-  name: string;
-}
-
-/** Credit balance for the account. */
-interface CreditBalance {
-  /** Remaining generative credits when not unlimited. */
-  balance: number;
-  /** When true, credit balance checks do not gate usage. */
-  unlimited: boolean;
-}
-
-/** Summary of a brand for display purposes. */
-interface BrandSummary {
-  /** Stable brand identifier. */
-  id: string;
-  /** Human-readable brand name. */
-  name: string;
-  /** Source URL used for onboarding and context. */
-  url: string;
-  /** Lifecycle state of brand analysis and readiness. */
-  status: "analyzing" | "ready" | "logo_required";
-  /** Number of images generated for this brand (list endpoint). */
-  imageCount: number;
-  /** ISO timestamp of when the brand record was created. */
-  createdAt: string;
-}
-
-/** JSON envelope returned by `GET /workspaces`. */
-interface WorkspacesResponse {
-  data: {
-    workspaces: Workspace[];
-  };
-}
-
-/** JSON envelope returned by `GET /brands?limit=50`. */
-interface BrandsListResponse {
-  data: {
-    brands: BrandSummary[];
-  };
-}
+import {
+  BloomClient,
+  BrandListItem,
+  BrandStatus,
+  CreditBalance,
+  Workspace,
+} from "../quickstart";
 
 /**
  * Example credit costs for common jobs (illustrative; adjust if your plan differs).
@@ -77,91 +32,19 @@ const COST_ESTIMATES = [
 ] as const;
 
 /**
- * Fetches the workspace list from `GET /workspaces`.
- *
- * @param apiKey - Bloom API key used for `x-api-key` authentication.
- * @returns Workspace rows from the `data.workspaces` array.
- */
-async function fetchWorkspaces(apiKey: string): Promise<Workspace[]> {
-  const url = `${API_BASE}/workspaces`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-  });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`Bloom API error [${response.status}]: ${text}`);
-  }
-
-  if (text.length === 0) {
-    throw new Error(`Bloom API error [${response.status}]: empty response body`);
-  }
-
-  const payload = JSON.parse(text) as WorkspacesResponse;
-
-  if (
-    !payload.data ||
-    !Array.isArray(payload.data.workspaces)
-  ) {
-    throw new Error("Bloom API error: workspaces response missing data.workspaces");
-  }
-
-  return payload.data.workspaces;
-}
-
-/**
- * Fetches brand summaries from `GET /brands?limit=50`.
- *
- * @param apiKey - Bloom API key used for `x-api-key` authentication.
- * @returns Brand rows from the `data.brands` array, typed as summaries for display.
- */
-async function fetchBrandSummaries(apiKey: string): Promise<BrandSummary[]> {
-  const url = `${API_BASE}/brands?limit=50`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-  });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`Bloom API error [${response.status}]: ${text}`);
-  }
-
-  if (text.length === 0) {
-    throw new Error(`Bloom API error [${response.status}]: empty response body`);
-  }
-
-  const payload = JSON.parse(text) as BrandsListResponse;
-
-  if (!payload.data || !Array.isArray(payload.data.brands)) {
-    throw new Error("Bloom API error: brands response missing data.brands");
-  }
-
-  return payload.data.brands as BrandSummary[];
-}
-
-/**
  * Formats a brand status string with a visual indicator.
- *
- * @param status - Brand lifecycle status from the API.
- * @returns A short, human-readable label with a leading symbol.
  */
-function formatStatus(status: BrandSummary["status"]): string {
+function formatStatus(status: BrandStatus): string {
   if (status === "ready") {
     return "● ready";
   }
 
   if (status === "analyzing") {
     return "◌ analyzing";
+  }
+
+  if (status === "failed") {
+    return "✗ failed";
   }
 
   return "⚠ logo required";
@@ -203,7 +86,7 @@ async function checkCredits(): Promise<void> {
       console.log(`✓ Credits: ${credits.balance} remaining`);
     }
 
-    const workspaces = await fetchWorkspaces(apiKey);
+    const workspaces: Workspace[] = await client.listWorkspaces();
 
     console.log(`\n✓ Workspaces (${workspaces.length}):`);
 
@@ -212,7 +95,7 @@ async function checkCredits(): Promise<void> {
       console.log(`  · ${ws.name}${label}`);
     }
 
-    const brands = await fetchBrandSummaries(apiKey);
+    const { brands } = await client.listBrands({ limit: 50 });
 
     if (brands.length === 0) {
       console.log("\n  No brands yet. Run the quickstart to onboard one.");
@@ -220,10 +103,7 @@ async function checkCredits(): Promise<void> {
       console.log(`\n✓ Brands (${brands.length}):`);
 
       for (const brand of brands) {
-        console.log(`  · ${brand.name}`);
-        console.log(`    ${formatStatus(brand.status)}`);
-        console.log(`    ${brand.imageCount} image(s) generated`);
-        console.log(`    ${brand.url}`);
+        printBrandSummary(brand);
       }
     }
 
@@ -245,6 +125,13 @@ async function checkCredits(): Promise<void> {
     console.error(`\n✗ ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
+}
+
+function printBrandSummary(brand: BrandListItem): void {
+  console.log(`  · ${brand.name}`);
+  console.log(`    ${formatStatus(brand.status)}`);
+  console.log(`    ${brand.imageCount} image(s) generated`);
+  console.log(`    ${brand.url}`);
 }
 
 checkCredits();

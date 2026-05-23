@@ -25,21 +25,16 @@ Environment variables:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-
-import requests
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from quickstart import BloomClient
-
-API_BASE = "https://www.trybloom.ai/api/v1"
 
 PLATFORMS = [
     {"name": "Instagram Feed", "aspectRatio": "1:1"},
@@ -52,49 +47,19 @@ PROMPT = "A clean product lifestyle shot with soft natural lighting"
 
 
 def start_generation(
-    api_key: str,
+    client: BloomClient,
     brand_session_id: str,
     platform: dict,
 ) -> dict:
-    """
-    POST /images/generations for one platform.
-
-    Returns a dict with keys ``platform`` (the input row) and ``ids`` (list).
-    """
-    url = f"{API_BASE}/images/generations"
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
-    }
-    body = {
-        "brandSessionId": brand_session_id,
-        "prompt": PROMPT,
-        "aspectRatio": platform["aspectRatio"],
-        "imageSize": "2K",
-        "model": "fast",
-        "variantCount": 1,
-        "referenceImageIds": [],
-    }
-    response = requests.post(url, headers=headers, json=body, timeout=120)
-    text = response.text
-
-    if not response.ok:
-        raise RuntimeError(f"Bloom API error [{response.status_code}]: {text}")
-
-    if not text:
-        raise RuntimeError(
-            f"Bloom API error [{response.status_code}]: empty response body",
-        )
-
-    payload = json.loads(text)
-    if "data" not in payload or not isinstance(payload["data"], dict):
-        raise RuntimeError("Bloom API error: missing data envelope")
-
-    data = payload["data"]
-    ids = data.get("ids")
-    if not isinstance(ids, list):
-        raise RuntimeError("Bloom API error: generation response missing ids array")
-
+    """POST /images/generations for one platform via ``BloomClient``."""
+    ids = client.generate_images(
+        brand_session_id,
+        PROMPT,
+        aspect_ratio=platform["aspectRatio"],
+        image_size="2K",
+        model="fast",
+        variant_count=1,
+    )
     return {"platform": platform, "ids": ids}
 
 
@@ -117,9 +82,8 @@ def batch_generate() -> None:
             sys.exit(1)
 
         brand = brands[0]
-        brand_session_id = brand.get("brandSessionId") or brand["id"]
-        display_name = brand.get("name") or brand.get("id")
-        print(f"✓ Using brand: {display_name}")
+        brand_session_id = brand["id"]
+        print(f"✓ Using brand: {brand['name']}")
 
         print(f"\n⏳ Starting generation for {len(PLATFORMS)} platforms...")
 
@@ -128,7 +92,7 @@ def batch_generate() -> None:
             futures = {
                 pool.submit(
                     start_generation,
-                    api_key,
+                    client,
                     brand_session_id,
                     platform,
                 ): platform

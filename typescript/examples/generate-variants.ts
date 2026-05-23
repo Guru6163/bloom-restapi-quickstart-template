@@ -16,7 +16,7 @@
 
 import "dotenv/config";
 
-import { BloomClient, Brand, Image } from "../quickstart";
+import { BloomClient, Image } from "../quickstart";
 
 const VARIANT_PROMPT =
   "A bold product hero image with clean composition";
@@ -36,7 +36,7 @@ async function generateVariants(): Promise<void> {
 
     const client = new BloomClient(apiKey);
 
-    const brands = await client.listBrands();
+    const { brands } = await client.listBrands();
 
     if (brands.length === 0) {
       console.error(
@@ -45,15 +45,13 @@ async function generateVariants(): Promise<void> {
       process.exit(1);
     }
 
-    const brand: Brand = brands[0];
+    const brandSessionId = brands[0].id;
 
-    console.log(`✓ Using brand: ${brand.name}`);
-
-    const brandSessionId = brand.brandSessionId ?? brand.id;
+    console.log(`✓ Using brand: ${brands[0].name}`);
 
     console.log("⏳ Generating 4 variants...");
 
-    const ids = await client.generateImages(brandSessionId, VARIANT_PROMPT, {
+    const { ids } = await client.generateImages(brandSessionId, VARIANT_PROMPT, {
       variantCount: 4,
     });
 
@@ -62,7 +60,7 @@ async function generateVariants(): Promise<void> {
     console.log("✓ Variants ready:");
 
     for (const img of images) {
-      if (img.imageUrl === undefined || img.imageUrl.length === 0) {
+      if (img.imageUrl === undefined || img.imageUrl === null || img.imageUrl.length === 0) {
         throw new Error(`Image ${img.id} completed without a URL`);
       }
 

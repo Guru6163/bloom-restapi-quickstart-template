@@ -18,37 +18,37 @@ Environment variables:
 """
 
 # Response shape reference (plain dicts/lists from the API `data` object; see
-# trybloom.ai/api/v1/docs). Keys are camelCase in JSON; Python code uses the
-# same keys when reading responses.
+# https://www.trybloom.ai/api/v1/spec.json). Keys are camelCase in JSON.
 #
-# Brand (list + detail):
-#   id, name, url, status, brandSessionId (optional),
-#   colors (optional list), fonts (optional list),
-#   aesthetic (optional), summary (optional),
-#   imageCount (optional), workspaceId (optional),
-#   workspaceName (optional), createdAt,
-#   logoUrl (optional), logoError (optional)
+# BrandListItem (GET /brands):
+#   id, name, url, status (analyzing|ready|logo_required|failed),
+#   imageCount, workspaceId (str|null), workspaceName, createdAt
 #
-# CreditBalance:
+# Brand (GET /brands/{id}):
+#   id, status, name, url, logoUrl (str|null), logoError (optional),
+#   colors, fonts, aesthetic (str|null), summary (str|null),
+#   workspaceId (str|null), workspaceName, createdAt
+#
+# CreditBalance (GET /credits):
 #   balance (int), unlimited (bool)
 #
-# Workspace:
+# Workspace (GET /workspaces):
 #   id (str | None — None = personal workspace), name
 #
-# Image:
-#   id, status, source (optional: generated|uploaded|scraped),
-#   imageUrl (optional), aspectRatio (optional),
-#   prompt (optional), description (optional),
-#   actionType (optional), variantGroupId (optional),
-#   brandSessionId (optional), width (optional), height (optional),
-#   workspaceId (optional), workspaceName (optional), createdAt (optional)
+# Image (GET /images, GET /images/{id}):
+#   id, source (generated|uploaded|scraped), brandSessionId (list only),
+#   prompt (str|null), description (str|null), aspectRatio (str|null),
+#   width (number|null), height (number|null),
+#   actionType (generation|edit|resize|variant|recreate|null),
+#   variantGroupId (str|null), status (pending|generating|completed|failed|null),
+#   imageUrl (str|null), workspaceId (str|null), workspaceName, createdAt
 #
-# UploadedImage:
+# UploadedImage (POST /images/uploads):
 #   id, imageUrl, width, height, mimeType
 #
-# SearchCandidate:
-#   id, url, description (optional), width, height,
-#   aspectRatio, distance (float)
+# SearchCandidate (POST /images/search):
+#   id, url, description, width (number|null), height (number|null),
+#   aspectRatio (str|null), distance (float)
 
 import os
 import sys
@@ -84,7 +84,7 @@ class BloomClient:
         """
         Internal request helper. Raises RuntimeError on non-2xx responses
         with the format: "Bloom API error [STATUS]: <body>"
-        Returns response.json()["data"].
+        Returns response.json()["data"] per the OpenAPI spec.
         """
         url = f"{self.base_url}{path}"
         response = self._session.request(method, url, **kwargs)
@@ -94,25 +94,8 @@ class BloomClient:
                 f"Bloom API error [{response.status_code}]: {response.text}"
             )
 
-        try:
-            payload = response.json()
-        except ValueError as exc:
-            raise RuntimeError(
-                f"Bloom API error [{response.status_code}]: invalid JSON body"
-            ) from exc
-
-        if "data" not in payload:
-            raise RuntimeError(
-                f"Bloom API error [{response.status_code}]: missing 'data' envelope"
-            )
-
-        data = payload["data"]
-        if not isinstance(data, dict):
-            raise RuntimeError(
-                f"Bloom API error [{response.status_code}]: 'data' must be an object"
-            )
-
-        return data
+        payload = response.json()
+        return payload["data"]
 
     def validate_key(self, workspace_id=None) -> dict:
         """
@@ -150,10 +133,7 @@ class BloomClient:
         else:
             params["limit"] = 50
         envelope = self._request("GET", "/brands", params=params)
-        brands = envelope.get("brands")
-        if not isinstance(brands, list):
-            raise RuntimeError("Bloom API error: 'brands' is not a list")
-        return brands
+        return envelope["brands"]
 
     def list_workspaces(self) -> list:
         """
@@ -162,10 +142,7 @@ class BloomClient:
         Returns list of workspace dicts.
         """
         envelope = self._request("GET", "/workspaces")
-        workspaces = envelope.get("workspaces")
-        if not isinstance(workspaces, list):
-            raise RuntimeError("Bloom API error: 'workspaces' is not a list")
-        return workspaces
+        return envelope["workspaces"]
 
     def onboard_brand(self, url: str, logo_url=None, workspace_id=None) -> str:
         """
@@ -185,10 +162,7 @@ class BloomClient:
         if workspace_id is not None:
             body["workspaceId"] = workspace_id
         envelope = self._request("POST", "/brands", json=body)
-        brand_id = envelope.get("id")
-        if not isinstance(brand_id, str):
-            raise RuntimeError("Bloom API error: missing brand id in onboard response")
-        return brand_id
+        return envelope["id"]
 
     def wait_for_brand(self, brand_id: str) -> dict:
         """
@@ -262,10 +236,7 @@ class BloomClient:
             "referenceImageIds": ref_ids,
         }
         envelope = self._request("POST", "/images/generations", json=body)
-        ids = envelope.get("ids")
-        if not isinstance(ids, list):
-            raise RuntimeError("Bloom API error: 'ids' is not a list")
-        return ids
+        return envelope["ids"]
 
     def wait_for_images(self, ids: list) -> list:
         """
@@ -290,9 +261,7 @@ class BloomClient:
                 "includeUrls": "true",
             },
         )
-        images = envelope.get("images")
-        if not isinstance(images, list):
-            raise RuntimeError("Bloom API error: 'images' is not a list")
+        images = envelope["images"]
 
         for image in images:
             if image.get("status") == "failed":
@@ -332,10 +301,7 @@ class BloomClient:
             "referenceImageIds": ref_ids,
         }
         envelope = self._request("POST", path, json=body)
-        new_id = envelope.get("id")
-        if not isinstance(new_id, str):
-            raise RuntimeError("Bloom API error: missing image id in edit response")
-        return new_id
+        return envelope["id"]
 
     def resize_image(
         self,
@@ -358,10 +324,7 @@ class BloomClient:
             "targetAspectRatio": target_aspect_ratio,
         }
         envelope = self._request("POST", path, json=body)
-        new_id = envelope.get("id")
-        if not isinstance(new_id, str):
-            raise RuntimeError("Bloom API error: missing image id in resize response")
-        return new_id
+        return envelope["id"]
 
     def upload_image_url(self, image_url: str, brand_session_id=None) -> dict:
         """
@@ -403,10 +366,7 @@ class BloomClient:
         if cursor is not None:
             body["cursor"] = cursor
         envelope = self._request("POST", "/images/search", json=body)
-        candidates = envelope.get("candidates")
-        if not isinstance(candidates, list):
-            raise RuntimeError("Bloom API error: 'candidates' is not a list")
-        return candidates
+        return envelope["candidates"]
 
 
 def main() -> None:
@@ -462,7 +422,7 @@ def main() -> None:
             ready_name = brand.get("name") or brand.get("id")
             print(f"✓ Brand ready: {ready_name}")
 
-        brand_session_id = brand.get("brandSessionId") or brand["id"]
+        brand_session_id = brand["id"]
 
         print("\n⏳ Generating 2 images (16:9)...")
 

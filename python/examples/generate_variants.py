@@ -54,7 +54,7 @@ def generate_variants() -> None:
         display_name = brand.get("name") or brand.get("id")
         print(f"✓ Using brand: {display_name}")
 
-        brand_session_id = brand.get("brandSessionId") or brand["id"]
+        brand_session_id = brand["id"]
 
         print("⏳ Generating 4 variants...")
 

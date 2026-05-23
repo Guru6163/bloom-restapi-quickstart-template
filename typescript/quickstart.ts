@@ -19,155 +19,156 @@
 
 import "dotenv/config";
 
-/** Credit balance for the account. */
+/** Supported aspect ratios across image endpoints. */
+export type AspectRatio =
+  | "1:1"
+  | "2:3"
+  | "3:2"
+  | "3:4"
+  | "4:3"
+  | "4:5"
+  | "5:4"
+  | "9:16"
+  | "16:9"
+  | "21:9";
+
+/** Brand lifecycle status (`GET /brands`, `GET /brands/{id}`). */
+export type BrandStatus = "analyzing" | "ready" | "logo_required" | "failed";
+
+/** Status returned when creating a brand (`POST /brands`). */
+export type OnboardBrandStatus = "analyzing" | "logo_required";
+
+/** Status returned when updating a logo (`PUT /brands/{id}/logo`). */
+export type UpdateLogoStatus = "analyzing" | "ready";
+
+/** Image origin (`GET /images`, `GET /images/{id}`). */
+export type ImageSource = "generated" | "uploaded" | "scraped";
+
+/** Generation lifecycle status for generated images. */
+export type ImageStatus = "pending" | "generating" | "completed" | "failed";
+
+/** Action that produced a generated image. */
+export type ImageActionType =
+  | "generation"
+  | "edit"
+  | "resize"
+  | "variant"
+  | "recreate";
+
+/** Output resolution preset for generation and edit. */
+export type ImageSize = "2K" | "4K";
+
+/** Model tier for generation and edit. */
+export type ModelTier = "fast" | "standard" | "pro";
+
+/** Authenticated account profile (`GET /account`). */
+export interface Account {
+  email: string;
+  name: string | null;
+}
+
+/** Credit balance for a workspace (`GET /credits`). */
 export interface CreditBalance {
-  /** Remaining generative credits when not unlimited. */
   balance: number;
-  /** When true, credit balance checks do not gate usage. */
   unlimited: boolean;
 }
 
-/** Query options for {@link BloomClient.validateKey}. */
-export interface ValidateKeyOptions {
-  /** Team workspace ID; omit for the caller's personal workspace balance. */
-  workspaceId?: string;
-}
-
-/** Query options for {@link BloomClient.listBrands}. */
-export interface ListBrandsOptions {
-  /** Team workspace ID; omit to list across all workspaces the caller can see. */
-  workspaceId?: string;
-  /** Pagination cursor from a previous response's `nextCursor`. */
-  cursor?: string;
-  /** Results per page (1–100, default 50). */
-  limit?: number;
-}
-
-/** Optional body fields for {@link BloomClient.onboardBrand}. */
-export interface OnboardBrandOptions {
-  /** Explicit logo URL; skips automatic logo extraction when set. */
-  logoUrl?: string;
-  /** Team workspace ID; omit to create in the caller's personal workspace. */
-  workspaceId?: string;
-}
-
-/** A brand in the account (list + detail fields per OpenAPI). */
-export interface Brand {
-  /** Stable brand / session identifier (use as `brandSessionId` for generation). */
-  id: string;
-  /** Human-readable brand name (present when available). */
-  name?: string;
-  /** Source URL used for onboarding and context. */
-  url?: string;
-  /** Lifecycle state of brand analysis and readiness. */
-  status: "analyzing" | "ready" | "logo_required";
-  /**
-   * Session identifier used for image generation; when omitted, callers should use `id`.
-   */
-  brandSessionId?: string;
-  /** Brand palette extracted from the site or assets. */
-  colors?: string[];
-  /** Font descriptors inferred for the brand. */
-  fonts?: string[];
-  /** Short stylistic label for the brand. */
-  aesthetic?: string;
-  /** Narrative summary of positioning and tone. */
-  summary?: string;
-  /** Number of images associated with this brand (list endpoint). */
-  imageCount?: number;
-  /** Owning workspace identifier when applicable. */
-  workspaceId?: string;
-  /** Owning workspace display name when applicable. */
-  workspaceName?: string;
-  /** ISO timestamp of when the brand record was created. */
-  createdAt?: string;
-  /** Logo URL from detail responses. */
-  logoUrl?: string;
-  /** Error message when automatic logo extraction fails. */
-  logoError?: string;
-}
-
-/** A workspace the caller can access. */
+/** A workspace the caller can access (`GET /workspaces`). */
 export interface Workspace {
-  /**
-   * Workspace identifier, or `null` for the personal workspace.
-   */
+  /** Workspace identifier, or `null` for the personal workspace. */
   id: string | null;
-  /** Display name shown in the Bloom UI. */
   name: string;
 }
 
-/** Options for image generation (`POST /images/generations`). */
-export interface GenerateOptions {
-  /** Target aspect ratio for generated images. */
-  aspectRatio?:
-    | "1:1"
-    | "2:3"
-    | "3:2"
-    | "3:4"
-    | "4:3"
-    | "4:5"
-    | "5:4"
-    | "9:16"
-    | "16:9"
-    | "21:9";
-  /** Output resolution preset (`2K` default per API). */
-  imageSize?: "2K" | "4K";
-  /**
-   * Model tier. API default is `pro`; pass `fast` for lower cost in demos.
-   */
-  model?: "fast" | "standard" | "pro";
-  /** Number of creative variants to return from one request (1–5). */
-  variantCount?: number;
-  /** Reference images for style/content guidance (max 10). */
-  referenceImageIds?: string[];
+/** Brand row from `GET /brands` (list). */
+export interface BrandListItem {
+  id: string;
+  name: string;
+  url: string;
+  status: BrandStatus;
+  imageCount: number;
+  workspaceId: string | null;
+  workspaceName: string;
+  createdAt: string;
 }
 
-/** Options for {@link BloomClient.editImage}. */
-export interface EditImageOptions {
-  imageSize?: "2K" | "4K";
-  model?: "fast" | "standard" | "pro";
-  referenceImageIds?: string[];
+/** Full brand record from `GET /brands/{id}`. */
+export interface Brand {
+  id: string;
+  status: BrandStatus;
+  name: string;
+  url: string;
+  logoUrl: string | null;
+  logoError?: string;
+  colors: string[];
+  fonts: string[];
+  aesthetic: string | null;
+  summary: string | null;
+  workspaceId: string | null;
+  workspaceName: string;
+  createdAt: string;
 }
 
-/** Options for {@link BloomClient.getImage}. */
-export interface GetImageOptions {
-  /** When true, long-poll until a terminal status. */
-  wait?: boolean;
-  /** Max seconds to wait (1–295, default 120). */
-  timeout?: number;
+/** Cursor-paginated brand list (`GET /brands`). */
+export interface PaginatedBrands {
+  brands: BrandListItem[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
-/** Options for {@link BloomClient.searchImages}. */
-export interface SearchImagesOptions {
-  /** Max results (1–50, default 10). */
-  limit?: number;
-  /** Cosine-distance cutoff 0–2 (default 0.7). */
-  maxDistance?: number;
-  /** Pagination cursor from a previous `nextCursor`. */
-  cursor?: string;
+/** Acknowledgement from `POST /brands`. */
+export interface OnboardBrandResponse {
+  id: string;
+  status: OnboardBrandStatus;
+  logoError?: string;
 }
 
-/** A generated, uploaded, or scraped image record. */
+/** Acknowledgement from `POST /images/generations`. */
+export interface GenerateImagesResponse {
+  ids: string[];
+  variantGroupId: string | null;
+  status: "pending";
+}
+
+/** Acknowledgement from async image mutations (edit, resize). */
+export interface AsyncImageResponse {
+  id: string;
+  status: "pending";
+}
+
+/** Acknowledgement from logo update endpoints. */
+export interface UpdateLogoResponse {
+  id: string;
+  status: UpdateLogoStatus;
+}
+
+/** Image record from list and detail endpoints. */
 export interface Image {
   id: string;
-  source?: "generated" | "uploaded" | "scraped";
-  status: "pending" | "generating" | "completed" | "failed";
-  imageUrl?: string;
-  aspectRatio?: string;
-  width?: number;
-  height?: number;
-  prompt?: string;
-  description?: string;
-  actionType?: "generation" | "edit" | "resize" | "variant";
-  variantGroupId?: string;
+  source: ImageSource;
   brandSessionId?: string;
-  workspaceId?: string;
-  workspaceName?: string;
-  createdAt?: string;
+  prompt: string | null;
+  description: string | null;
+  aspectRatio: AspectRatio | null;
+  width: number | null;
+  height: number | null;
+  actionType: ImageActionType | null;
+  variantGroupId: string | null;
+  status: ImageStatus | null;
+  imageUrl?: string | null;
+  workspaceId: string | null;
+  workspaceName: string;
+  createdAt: string;
 }
 
-/** Response from `POST /images/uploads` (URL upload). */
+/** Cursor-paginated image list (`GET /images`). */
+export interface PaginatedImages {
+  images: Image[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/** Response from `POST /images/uploads` and file upload endpoints. */
 export interface UploadedImage {
   id: string;
   imageUrl: string;
@@ -180,11 +181,101 @@ export interface UploadedImage {
 export interface SearchCandidate {
   id: string;
   url: string;
-  description?: string;
-  width: number;
-  height: number;
-  aspectRatio: string;
+  description: string;
+  width: number | null;
+  height: number | null;
+  aspectRatio: AspectRatio | null;
   distance: number;
+}
+
+/** Full response from `POST /images/search`. */
+export interface SearchImagesResponse {
+  query: string;
+  candidates: SearchCandidate[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+/** Structured error body returned on non-2xx responses. */
+export interface BloomApiError {
+  defined: boolean;
+  code: string;
+  status: number;
+  message: string;
+  data?: unknown;
+}
+
+/** Query options for {@link BloomClient.getCredits}. */
+export interface GetCreditsOptions {
+  workspaceId?: string;
+}
+
+/** Query options for {@link BloomClient.listBrands}. */
+export interface ListBrandsOptions {
+  workspaceId?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+/** Query options for {@link BloomClient.getBrand}. */
+export interface GetBrandOptions {
+  wait?: boolean;
+  timeout?: number;
+}
+
+/** Optional body fields for {@link BloomClient.onboardBrand}. */
+export interface OnboardBrandOptions {
+  logoUrl?: string;
+  workspaceId?: string;
+}
+
+/** Options for image generation (`POST /images/generations`). */
+export interface GenerateOptions {
+  aspectRatio?: AspectRatio;
+  imageSize?: ImageSize;
+  model?: ModelTier;
+  variantCount?: number;
+  referenceImageIds?: string[];
+}
+
+/** Options for {@link BloomClient.editImage}. */
+export interface EditImageOptions {
+  imageSize?: ImageSize;
+  model?: ModelTier;
+  referenceImageIds?: string[];
+}
+
+/** Options for {@link BloomClient.getImage}. */
+export interface GetImageOptions {
+  wait?: boolean;
+  timeout?: number;
+}
+
+/** Query options for {@link BloomClient.listImages}. */
+export interface ListImagesOptions {
+  ids?: string[];
+  workspaceId?: string;
+  brandSessionId?: string;
+  cursor?: string;
+  limit?: number;
+  source?: ImageSource;
+  status?: ImageStatus;
+  actionType?: Exclude<ImageActionType, "recreate">;
+  includeUrls?: boolean;
+  wait?: boolean;
+  timeout?: number;
+}
+
+/** Options for {@link BloomClient.searchImages}. */
+export interface SearchImagesOptions {
+  limit?: number;
+  maxDistance?: number;
+  cursor?: string;
+}
+
+/** Workspaces list (`GET /workspaces`). */
+export interface WorkspacesResponse {
+  workspaces: Workspace[];
 }
 
 /** Standard JSON envelope for Bloom API success payloads. */
@@ -248,38 +339,46 @@ export class BloomClient {
       throw new Error(`Bloom API error [${response.status}]: ${text}`);
     }
 
-    const payload = (await response.json()) as ApiEnvelope<T>;
+    const { data } = (await response.json()) as ApiEnvelope<T>;
+    return data;
+  }
 
-    if (payload.data === undefined) {
-      throw new Error(`Bloom API error [${response.status}]: missing 'data' envelope`);
-    }
+  /**
+   * Returns the authenticated account profile (`GET /account`).
+   */
+  async getAccount(): Promise<Account> {
+    return this.request<Account>("/account", { method: "GET" });
+  }
 
-    return payload.data;
+  /**
+   * Fetches credit balance for a workspace (`GET /credits`).
+   */
+  async getCredits(options: GetCreditsOptions = {}): Promise<CreditBalance> {
+    const query = buildQuery({ workspaceId: options.workspaceId });
+    return this.request<CreditBalance>(`/credits${query}`, { method: "GET" });
   }
 
   /**
    * Validates the API key by fetching the credit balance.
    * Throws if the key is invalid or the request fails.
    */
-  async validateKey(options: ValidateKeyOptions = {}): Promise<CreditBalance> {
-    const query = buildQuery({ workspaceId: options.workspaceId });
-    return this.request<CreditBalance>(`/credits${query}`, { method: "GET" });
+  async validateKey(options: GetCreditsOptions = {}): Promise<CreditBalance> {
+    return this.getCredits(options);
   }
 
   /**
    * Lists brand sessions with cursor-based pagination.
    * Use returned `id` values as `brandSessionId` when generating images.
    */
-  async listBrands(options: ListBrandsOptions = {}): Promise<Brand[]> {
+  async listBrands(options: ListBrandsOptions = {}): Promise<PaginatedBrands> {
     const query = buildQuery({
       workspaceId: options.workspaceId,
       cursor: options.cursor,
       limit: options.limit ?? 50,
     });
-    const envelope = await this.request<{ brands: Brand[] }>(`/brands${query}`, {
+    return this.request<PaginatedBrands>(`/brands${query}`, {
       method: "GET",
     });
-    return envelope.brands;
   }
 
   /**
@@ -287,11 +386,11 @@ export class BloomClient {
    * Personal workspace always comes first with id: null.
    */
   async listWorkspaces(): Promise<Workspace[]> {
-    const envelope = await this.request<{ workspaces: Workspace[] }>(
+    const { workspaces } = await this.request<WorkspacesResponse>(
       "/workspaces",
       { method: "GET" },
     );
-    return envelope.workspaces;
+    return workspaces;
   }
 
   /**
@@ -302,7 +401,7 @@ export class BloomClient {
   async onboardBrand(
     url: string,
     options: OnboardBrandOptions = {},
-  ): Promise<{ id: string }> {
+  ): Promise<OnboardBrandResponse> {
     const body: Record<string, string> = { url };
     if (options.logoUrl !== undefined) {
       body.logoUrl = options.logoUrl;
@@ -310,11 +409,21 @@ export class BloomClient {
     if (options.workspaceId !== undefined) {
       body.workspaceId = options.workspaceId;
     }
-    const envelope = await this.request<{ id: string }>("/brands", {
+    return this.request<OnboardBrandResponse>("/brands", {
       method: "POST",
       body: JSON.stringify(body),
     });
-    return { id: envelope.id };
+  }
+
+  /**
+   * Fetches a brand by ID (`GET /brands/{id}`).
+   */
+  async getBrand(id: string, options: GetBrandOptions = {}): Promise<Brand> {
+    const path = `/brands/${encodeURIComponent(id)}${buildQuery({
+      wait: options.wait,
+      timeout: options.timeout,
+    })}`;
+    return this.request<Brand>(path, { method: "GET" });
   }
 
   /**
@@ -322,11 +431,7 @@ export class BloomClient {
    * Throws if the brand requires a logo to proceed.
    */
   async waitForBrand(id: string): Promise<Brand> {
-    const path = `/brands/${encodeURIComponent(id)}${buildQuery({
-      wait: true,
-      timeout: 120,
-    })}`;
-    const brand = await this.request<Brand>(path, { method: "GET" });
+    const brand = await this.getBrand(id, { wait: true, timeout: 120 });
 
     if (brand.status === "logo_required") {
       throw new Error(
@@ -339,10 +444,10 @@ export class BloomClient {
 
   /**
    * Starts generating images for a brand.
-   * Returns immediately with an array of image IDs — generation runs asynchronously.
+   * Returns immediately with image IDs — generation runs asynchronously.
    * Call waitForImages() to poll until complete.
    *
-   * @param brandSessionId - Brand session ID from `GET /brands` (`Brand.id` or `brandSessionId`)
+   * @param brandSessionId - Brand session ID from `GET /brands` (`BrandListItem.id`)
    * @param prompt - Description of the image to generate (max 2000 chars)
    * @param options - Optional: aspectRatio, imageSize, model, variantCount, referenceImageIds
    */
@@ -350,7 +455,7 @@ export class BloomClient {
     brandSessionId: string,
     prompt: string,
     options: GenerateOptions = {},
-  ): Promise<string[]> {
+  ): Promise<GenerateImagesResponse> {
     const {
       aspectRatio = "16:9",
       imageSize = "2K",
@@ -359,7 +464,7 @@ export class BloomClient {
       referenceImageIds = [],
     } = options;
 
-    const envelope = await this.request<{ ids: string[] }>("/images/generations", {
+    return this.request<GenerateImagesResponse>("/images/generations", {
       method: "POST",
       body: JSON.stringify({
         brandSessionId,
@@ -371,8 +476,26 @@ export class BloomClient {
         referenceImageIds,
       }),
     });
+  }
 
-    return envelope.ids;
+  /**
+   * Lists images with cursor-based pagination (`GET /images`).
+   */
+  async listImages(options: ListImagesOptions = {}): Promise<PaginatedImages> {
+    const query = buildQuery({
+      ids: options.ids?.join(","),
+      workspaceId: options.workspaceId,
+      brandSessionId: options.brandSessionId,
+      cursor: options.cursor,
+      limit: options.limit ?? 50,
+      source: options.source,
+      status: options.status,
+      actionType: options.actionType,
+      includeUrls: options.includeUrls,
+      wait: options.wait,
+      timeout: options.timeout,
+    });
+    return this.request<PaginatedImages>(`/images${query}`, { method: "GET" });
   }
 
   /**
@@ -386,23 +509,20 @@ export class BloomClient {
       return [];
     }
 
-    const query = buildQuery({
-      ids: ids.join(","),
+    const { images } = await this.listImages({
+      ids,
       wait: true,
       timeout: 120,
       includeUrls: true,
     });
-    const envelope = await this.request<{ images: Image[] }>(`/images${query}`, {
-      method: "GET",
-    });
 
-    for (const image of envelope.images) {
+    for (const image of images) {
       if (image.status === "failed") {
         throw new Error(`Image generation failed for ID: ${image.id}`);
       }
     }
 
-    return envelope.images;
+    return images;
   }
 
   /**
@@ -426,14 +546,14 @@ export class BloomClient {
     brandSessionId: string,
     prompt: string,
     options: EditImageOptions = {},
-  ): Promise<string> {
+  ): Promise<AsyncImageResponse> {
     const {
       imageSize = "2K",
       model = "pro",
       referenceImageIds = [],
     } = options;
     const path = `/images/${encodeURIComponent(imageId)}/edit`;
-    const envelope = await this.request<{ id: string }>(path, {
+    return this.request<AsyncImageResponse>(path, {
       method: "POST",
       body: JSON.stringify({
         brandSessionId,
@@ -443,7 +563,6 @@ export class BloomClient {
         referenceImageIds,
       }),
     });
-    return envelope.id;
   }
 
   /**
@@ -453,17 +572,16 @@ export class BloomClient {
   async resizeImage(
     imageId: string,
     brandSessionId: string,
-    targetAspectRatio: GenerateOptions["aspectRatio"] & string,
-  ): Promise<string> {
+    targetAspectRatio: AspectRatio,
+  ): Promise<AsyncImageResponse> {
     const path = `/images/${encodeURIComponent(imageId)}/resize`;
-    const envelope = await this.request<{ id: string }>(path, {
+    return this.request<AsyncImageResponse>(path, {
       method: "POST",
       body: JSON.stringify({
         brandSessionId,
         targetAspectRatio,
       }),
     });
-    return envelope.id;
   }
 
   /**
@@ -490,7 +608,7 @@ export class BloomClient {
     brandSessionId: string,
     query: string,
     options: SearchImagesOptions = {},
-  ): Promise<SearchCandidate[]> {
+  ): Promise<SearchImagesResponse> {
     const { limit = 10, maxDistance = 0.7, cursor } = options;
     const body: Record<string, string | number> = {
       brandSessionId,
@@ -501,14 +619,10 @@ export class BloomClient {
     if (cursor !== undefined) {
       body.cursor = cursor;
     }
-    const envelope = await this.request<{ candidates: SearchCandidate[] }>(
-      "/images/search",
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
-    );
-    return envelope.candidates;
+    return this.request<SearchImagesResponse>("/images/search", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 }
 
@@ -545,14 +659,15 @@ async function main(): Promise<void> {
       console.log(`✓ API key valid (${credits.balance} credits remaining)`);
     }
 
-    const brands = await client.listBrands();
+    const { brands } = await client.listBrands();
 
-    let brand: Brand;
+    let brandSessionId: string;
 
     if (brands.length > 0) {
       console.log(`✓ Found ${brands.length} brand(s)`);
-      brand = brands[0];
-      console.log(`✓ Using brand: ${brand.name ?? brand.id}`);
+      const listItem = brands[0];
+      brandSessionId = listItem.id;
+      console.log(`✓ Using brand: ${listItem.name}`);
     } else {
       const brandUrl = process.env.BLOOM_BRAND_URL;
 
@@ -570,16 +685,15 @@ async function main(): Promise<void> {
 
       console.log("⏳ Analyzing brand (this takes ~60 seconds)...");
 
-      brand = await client.waitForBrand(id);
+      const brand = await client.waitForBrand(id);
+      brandSessionId = brand.id;
 
-      console.log(`✓ Brand ready: ${brand.name ?? brand.id}`);
+      console.log(`✓ Brand ready: ${brand.name}`);
     }
-
-    const brandSessionId = brand.brandSessionId ?? brand.id;
 
     console.log("\n⏳ Generating 2 images (16:9)...");
 
-    const ids = await client.generateImages(
+    const { ids } = await client.generateImages(
       brandSessionId,
       "A bold product hero image with clean composition",
       {

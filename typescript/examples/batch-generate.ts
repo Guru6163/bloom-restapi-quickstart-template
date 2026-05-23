@@ -23,24 +23,12 @@
 
 import "dotenv/config";
 
-import { BloomClient, Brand, Image } from "../quickstart";
-
-const API_BASE = "https://www.trybloom.ai/api/v1";
+import { AspectRatio, BloomClient } from "../quickstart";
 
 /** A platform target for batch generation. */
 interface Platform {
-  /** Human-readable label shown in grouped output. */
   name: string;
-  /** Aspect ratio token sent to the image generation API. */
-  aspectRatio: "1:1" | "4:5" | "9:16" | "16:9";
-}
-
-/** The generation result for a single platform. */
-interface PlatformResult {
-  /** Platform metadata from the batch definition. */
-  platform: Platform;
-  /** Finished image records for this platform after polling. */
-  images: Image[];
+  aspectRatio: AspectRatio;
 }
 
 const PLATFORMS: Platform[] = [
@@ -52,70 +40,26 @@ const PLATFORMS: Platform[] = [
 
 const PROMPT = "A clean product lifestyle shot with soft natural lighting";
 
-/** Parsed JSON body from a successful `POST /images/generations` response. */
-interface GenerationAck {
-  /** Image job identifiers returned for this request. */
-  ids: string[];
-}
-
 /**
- * Fires a single generation request for one platform.
- * Returns the platform paired with its image IDs.
- *
- * @param apiKey - Bloom API key used for `x-api-key` authentication.
- * @param brandSessionId - Brand session used to anchor on-brand generation.
- * @param platform - Target platform (name and aspect ratio).
- * @returns The platform plus the image IDs created for that request.
+ * Starts generation for one platform via {@link BloomClient.generateImages}.
  */
 async function startGeneration(
-  apiKey: string,
+  client: BloomClient,
   brandSessionId: string,
   platform: Platform,
 ): Promise<{ platform: Platform; ids: string[] }> {
-  const url = `${API_BASE}/images/generations`;
-  const body = JSON.stringify({
-    brandSessionId,
-    prompt: PROMPT,
+  const { ids } = await client.generateImages(brandSessionId, PROMPT, {
     aspectRatio: platform.aspectRatio,
     imageSize: "2K",
     model: "fast",
     variantCount: 1,
   });
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-    },
-    body,
-  });
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`Bloom API error [${response.status}]: ${text}`);
-  }
-
-  if (text.length === 0) {
-    throw new Error(`Bloom API error [${response.status}]: empty response body`);
-  }
-
-  const data = JSON.parse(text) as GenerationAck;
-
-  if (!Array.isArray(data.ids)) {
-    throw new Error("Bloom API error: generation response missing ids array");
-  }
-
-  return { platform, ids: data.ids };
+  return { platform, ids };
 }
 
 /**
  * Generates images for all platforms in parallel and prints
  * results grouped by platform name.
- *
- * @remarks Each printed block corresponds to one {@link PlatformResult}
- * (platform metadata plus the image URLs resolved for that platform).
  */
 async function batchGenerate(): Promise<void> {
   try {
@@ -129,23 +73,22 @@ async function batchGenerate(): Promise<void> {
 
     const client = new BloomClient(apiKey);
 
-    const brands = await client.listBrands();
+    const { brands } = await client.listBrands();
 
     if (brands.length === 0) {
       console.error("✗ No brands found. Run the quickstart first.");
       process.exit(1);
     }
 
-    const brand: Brand = brands[0];
-    const brandSessionId = brand.brandSessionId ?? brand.id;
+    const brandSessionId = brands[0].id;
 
-    console.log(`✓ Using brand: ${brand.name}`);
+    console.log(`✓ Using brand: ${brands[0].name}`);
 
     console.log(`\n⏳ Starting generation for ${PLATFORMS.length} platforms...`);
 
     const generations = await Promise.all(
       PLATFORMS.map((platform) =>
-        startGeneration(apiKey, brandSessionId, platform),
+        startGeneration(client, brandSessionId, platform),
       ),
     );
 
