@@ -34,11 +34,17 @@ COST_ESTIMATES = [
 
 
 def format_status(status: str) -> str:
-    """Format brand status with a visual indicator."""
+    """
+    Returns a labelled symbol for a brand status string.
+
+    Statuses: "ready" | "analyzing" | "failed" | "logo_required"
+    """
     if status == "ready":
         return "● ready"
     if status == "analyzing":
         return "◌ analyzing"
+    if status == "failed":
+        return "✗ failed"
     return "⚠ logo required"
 
 

@@ -14,28 +14,27 @@
 ### 1. Install dependencies
 
 ```bash
-python3 -m pip install requests
+python3 -m pip install -r requirements.txt
 ```
 
-If `pip3` is on your PATH, `pip3 install requests` is equivalent. On some systems `python` / `pip` work; if you see `command not found`, use `python3` / `python3 -m pip` as above.
+This installs `requests` and `python-dotenv`. On some systems `pip` or `pip3` work in place of `python3 -m pip`.
 
 ### 2. Configure environment
 
 ```bash
-export BLOOM_API_KEY=bloom_sk_your_key_here
-
-# Optional: only needed if you have no brands yet
-export BLOOM_BRAND_URL=https://yourbrand.com
+cp .env.example .env
 ```
 
-Or create a `.env` file:
+Open `.env` and fill in your values:
 
 ```env
 BLOOM_API_KEY=bloom_sk_your_key_here
+
+# Optional: only needed if you have no brands yet
 BLOOM_BRAND_URL=https://yourbrand.com
 ```
 
-`quickstart.py` reads `os.environ` only — it does not load `.env` automatically. Export variables in your shell, or load `.env` with your own tooling before running.
+`quickstart.py` calls `load_dotenv()` automatically, so the `.env` file is picked up without any extra steps.
 
 ---
 

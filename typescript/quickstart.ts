@@ -53,7 +53,8 @@ export type ImageActionType =
   | "edit"
   | "resize"
   | "variant"
-  | "recreate";
+  | "recreate"
+  | "remove-background";
 
 /** Output resolution preset for generation and edit. */
 export type ImageSize = "2K" | "4K";
